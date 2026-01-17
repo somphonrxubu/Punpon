@@ -153,6 +153,24 @@
                 });
             };
 
+            // Helper function to adjust font size based on text length
+            const getDynamicFontSize = (amount, isGrandTotal = false) => {
+                const textLength = formatCurrency(amount).length;
+                
+                if (isGrandTotal) {
+                    // For Grand Total box (larger baseline)
+                    if (textLength > 18) return "text-xl";
+                    if (textLength > 14) return "text-2xl";
+                    if (textLength > 12) return "text-3xl";
+                    return "text-4xl";
+                } else {
+                    // For small cards
+                    if (textLength > 16) return "text-sm";
+                    if (textLength > 13) return "text-lg";
+                    return "text-2xl";
+                }
+            };
+
             return (
                 <div className="min-h-screen bg-slate-50 font-sans text-slate-800 pb-10">
                 {/* Header */}
@@ -271,14 +289,14 @@
                         <div className="grid grid-cols-2 gap-3">
                             <div className="bg-white p-4 rounded-xl shadow-sm border-l-4 border-blue-500">
                                 <div className="text-xs text-slate-500 mb-1">เงินปันผล</div>
-                                <div className="text-2xl font-bold text-blue-600 truncate">
+                                <div className={`font-bold text-blue-600 ${getDynamicFontSize(dividendAmount)}`}>
                                     {formatCurrency(dividendAmount)}
                                 </div>
                             </div>
 
                             <div className="bg-white p-4 rounded-xl shadow-sm border-l-4 border-emerald-500">
                                 <div className="text-xs text-slate-500 mb-1">เงินเฉลี่ยคืน</div>
-                                <div className="text-2xl font-bold text-emerald-600 truncate">
+                                <div className={`font-bold text-emerald-600 ${getDynamicFontSize(refundAmount)}`}>
                                     {formatCurrency(refundAmount)}
                                 </div>
                             </div>
@@ -293,7 +311,7 @@
                                 <div className="text-indigo-100 font-medium mb-2 flex justify-center items-center gap-2">
                                     <Icon name="Wallet" size={18} /> ยอดรวมก่อนหักประกันชีวิต
                                 </div>
-                                <div className="text-4xl font-bold tracking-tight">
+                                <div className={`font-bold tracking-tight ${getDynamicFontSize(totalAmount, true)}`}>
                                     {formatCurrency(totalAmount)}
                                 </div>
                                 <div className="mt-4 text-xs text-indigo-200 bg-white/10 inline-block px-3 py-1 rounded-full">
