@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>คำนวณเงินปันผลสหกรณ์</title>
+    
+    <!-- 1. Preconnect to CDNs for faster handshake -->
+    <link rel="preconnect" href="https://cdn.tailwindcss.com">
+    <link rel="preconnect" href="https://unpkg.com">
+
+    <style>
+        /* Custom Animations */
+        @keyframes shine { 100% { left: 125%; } }
+        .animate-shine { animation: shine 1s; }
+        @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+        .animate-fade-in { animation: fade-in 0.3s ease-in-out; }
+        @keyframes fade-in-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in-up { animation: fade-in-up 0.5s ease-out; }
+
+        /* Loader Styles (Inline to show immediately) */
+        .initial-loader {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f8fafc; /* slate-50 to match body */
+            font-family: sans-serif;
+            flex-direction: column;
+        }
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid #e2e8f0;
+            border-top: 4px solid #2563eb; /* blue-600 */
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 1rem;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<!-- เพิ่ม inline style background-color เพื่อให้สีมาทันทีไม่ต้องรอ Tailwind -->
+<body class="bg-slate-50" style="background-color: #f8fafc; margin: 0;">
+    <div id="root">
+        <!-- Loading UI (Shows immediately because scripts are deferred) -->
+        <div class="initial-loader">
+            <div class="spinner"></div>
+            <div style="color: #475569; font-weight: 500;">กำลังโหลดระบบ...</div>
+        </div>
+    </div>
+
+    <!-- Scripts moved to bottom for non-blocking rendering -->
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // --- ICON COMPONENT HELPER ---
+        const Icon = ({ name, size = 24, className = "" }) => {
+            const lucide = window.lucide;
+            if (!lucide || !lucide.icons || !lucide.icons[name]) return null;
+            
+            try {
+                // Support createElement (Newer Lucide)
+                if (typeof lucide.createElement === 'function') {
+                    const svgElement = lucide.createElement(lucide.icons[name]);
+                    svgElement.setAttribute('width', size);
+                    svgElement.setAttribute('height', size);
+                    if (className) svgElement.setAttribute('class', className);
+                    svgElement.setAttribute('stroke-width', 2);
+                    return <span dangerouslySetInnerHTML={{ __html: svgElement.outerHTML }} className="flex items-center justify-center" />;
+                }
+                // Support toSvg (Older Lucide fallback)
+                if (typeof lucide.icons[name].toSvg === 'function') {
+                     const svgString = lucide.icons[name].toSvg({
+                        class: className,
+                        width: size,
+                        height: size,
+                        "stroke-width": 2
+                    });
+                    return <span dangerouslySetInnerHTML={{ __html: svgString }} className="flex items-center justify-center" />;
+                }
+            } catch (e) {
+                console.error("Icon render error:", e);
+                return null;
+            }
+            return null;
+        };
+
+        const App = () => {
+            // State สำหรับเก็บค่า input
+            const [shareCapital, setShareCapital] = useState(''); // เงินค่าหุ้นยกมาจากสิ้นปีก่อน
+            const [monthlyShare, setMonthlyShare] = useState(''); // ค่าหุ้นรายเดือน (NEW)
+            const [dividendRate, setDividendRate] = useState('');
+            const [loanInterest, setLoanInterest] = useState('');
+            const [refundRate, setRefundRate] = useState('');
+
+            // ฟังก์ชันคำนวณ
+            const calculateDividend = () => {
+                const capital = parseFloat(shareCapital) || 0;
+                const monthly = parseFloat(monthlyShare) || 0;
+                const rate = parseFloat(dividendRate) || 0;
+
+                // 1. คำนวณจากค่าหุ้นยกมาจากสิ้นปีก่อน
+                const part1 = capital * (rate / 100);
+
+                // 2. คำนวณจากอัตราเงินสะสมรายเดือนในปีนี้ (ถ่วงน้ำหนักตามเดือน)
+                // สูตร: monthly * 5.5 * (rate / 100)
+                const part2 = monthly * 5.5 * (rate / 100);
+
+                return part1 + part2;
+            };
+
+            const calculateRefund = () => {
+                const interest = parseFloat(loanInterest) || 0;
+                const rate = parseFloat(refundRate) || 0;
+                return interest * (rate / 100);
+            };
+
+            const dividendAmount = calculateDividend();
+            const refundAmount = calculateRefund();
+            const totalAmount = dividendAmount + refundAmount;
+
+            const handleReset = () => {
+                setShareCapital('');
+                setMonthlyShare('');
+                setDividendRate('');
+                setLoanInterest('');
+                setRefundRate('');
+            };
+
+            const formatCurrency = (amount) => {
+                return amount.toLocaleString('th-TH', {
+                style: 'currency',
+                currency: 'THB',
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+                });
+            };
+
+            return (
+                <div className="min-h-screen bg-slate-50 font-sans text-slate-800 pb-10">
+                {/* Header */}
+                <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white p-6 shadow-lg rounded-b-3xl mb-8">
+                    <div className="max-w-4xl mx-auto flex items-center gap-3">
+                    <div className="bg-white/20 p-2 rounded-xl">
+                        <Icon name="Landmark" size={32} className="text-white" />
+                    </div>
+                    <div>
+                        <h1 className="text-2xl font-bold">คำนวณเงินปันผลสหกรณ์</h1>
+                        <p className="text-blue-100 text-sm opacity-90">คำนวณง่ายๆ แค่ปลายนิ้ว</p>
+                    </div>
+                    </div>
+                </div>
+
+                {/* Main Content */}
+                <div className="max-w-4xl mx-auto px-4 space-y-6">
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        
+                        {/* Card 1: เงินปันผล */}
+                        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden h-full">
+                        <div className="bg-blue-50/50 p-4 border-b border-blue-100 flex items-center gap-2">
+                            <span className="text-blue-600"><Icon name="PiggyBank" size={20} /></span>
+                            <h2 className="font-semibold text-blue-800">เงินปันผล</h2>
+                        </div>
+                        <div className="p-5 space-y-4">
+                            <div>
+                            <label className="block text-sm font-medium text-slate-600 mb-1">เงินค่าหุ้นยกมาจากสิ้นปีก่อน (บาท)</label>
+                            <div className="relative">
+                                <input
+                                type="number"
+                                value={shareCapital}
+                                onChange={(e) => setShareCapital(e.target.value)}
+                                placeholder="0.00"
+                                className="w-full pl-3 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all text-lg font-medium"
+                                />
+                                <span className="absolute right-3 top-3.5 text-slate-400">฿</span>
+                            </div>
+                            </div>
+                            
+                            <div>
+                            <label className="block text-sm font-medium text-slate-600 mb-1">ค่าหุ้นรายเดือน (บาท)</label>
+                            <div className="relative">
+                                <input
+                                type="number"
+                                value={monthlyShare}
+                                onChange={(e) => setMonthlyShare(e.target.value)}
+                                placeholder="0.00"
+                                className="w-full pl-3 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all text-lg font-medium"
+                                />
+                                <span className="absolute right-3 top-3.5 text-slate-400">฿</span>
+                            </div>
+                            </div>
+
+                            <div>
+                            <label className="block text-sm font-medium text-slate-600 mb-1">อัตราเงินปันผลปีนี้ (%)</label>
+                            <div className="relative">
+                                <input
+                                type="number"
+                                value={dividendRate}
+                                onChange={(e) => setDividendRate(e.target.value)}
+                                placeholder="0.00"
+                                className="w-full pl-3 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all text-lg font-medium"
+                                />
+                                <span className="absolute right-3 top-3.5 text-slate-400"><Icon name="Percent" size={18} /></span>
+                            </div>
+                            </div>
+                        </div>
+                        </div>
+
+                        {/* Card 2: เงินเฉลี่ยคืน */}
+                        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden h-full">
+                        <div className="bg-emerald-50/50 p-4 border-b border-emerald-100 flex items-center gap-2">
+                            <span className="text-emerald-600"><Icon name="RefreshCw" size={20} /></span>
+                            <h2 className="font-semibold text-emerald-800">เงินเฉลี่ยคืน</h2>
+                        </div>
+                        <div className="p-5 space-y-4">
+                            <div>
+                            <label className="block text-sm font-medium text-slate-600 mb-1">ดอกเบี้ยเงินกู้สะสมปีนี้ (บาท)</label>
+                            <div className="relative">
+                                <input
+                                type="number"
+                                value={loanInterest}
+                                onChange={(e) => setLoanInterest(e.target.value)}
+                                placeholder="0.00"
+                                className="w-full pl-3 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all text-lg font-medium"
+                                />
+                                <span className="absolute right-3 top-3.5 text-slate-400">฿</span>
+                            </div>
+                            </div>
+                            <div>
+                            <label className="block text-sm font-medium text-slate-600 mb-1">อัตราเงินเฉลี่ยคืนปีนี้ (%)</label>
+                            <div className="relative">
+                                <input
+                                type="number"
+                                value={refundRate}
+                                onChange={(e) => setRefundRate(e.target.value)}
+                                placeholder="0.00"
+                                className="w-full pl-3 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all text-lg font-medium"
+                                />
+                                <span className="absolute right-3 top-3.5 text-slate-400"><Icon name="Percent" size={18} /></span>
+                            </div>
+                            </div>
+                        </div>
+                        </div>
+
+                    </div>
+
+                    {/* Results Section */}
+                    <div className="max-w-xl mx-auto space-y-4">
+                        <h3 className="text-lg font-semibold text-slate-700 flex items-center gap-2 mt-4">
+                            <Icon name="Calculator" size={20} /> สรุปยอดเงินที่คาดว่าจะได้รับ
+                        </h3>
+                        
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="bg-white p-4 rounded-xl shadow-sm border-l-4 border-blue-500">
+                                <div className="text-xs text-slate-500 mb-1">เงินปันผล</div>
+                                <div className="text-2xl font-bold text-blue-600 truncate">
+                                    {formatCurrency(dividendAmount)}
+                                </div>
+                            </div>
+
+                            <div className="bg-white p-4 rounded-xl shadow-sm border-l-4 border-emerald-500">
+                                <div className="text-xs text-slate-500 mb-1">เงินเฉลี่ยคืน</div>
+                                <div className="text-2xl font-bold text-emerald-600 truncate">
+                                    {formatCurrency(refundAmount)}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Grand Total */}
+                        <div className="bg-gradient-to-br from-indigo-600 to-violet-700 rounded-2xl shadow-lg p-6 text-white relative overflow-hidden">
+                            <div className="absolute top-0 right-0 p-4 opacity-10">
+                                <Icon name="Coins" size={100} />
+                            </div>
+                            <div className="relative z-10 text-center">
+                                <div className="text-indigo-100 font-medium mb-2 flex justify-center items-center gap-2">
+                                    <Icon name="Wallet" size={18} /> ยอดรวมก่อนหักประกันชีวิต
+                                </div>
+                                <div className="text-4xl font-bold tracking-tight">
+                                    {formatCurrency(totalAmount)}
+                                </div>
+                                <div className="mt-4 text-xs text-indigo-200 bg-white/10 inline-block px-3 py-1 rounded-full">
+                                    (เงินปันผล + เงินเฉลี่ยคืน)
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Reset Button */}
+                        <button 
+                            onClick={handleReset}
+                            className="w-full py-3 text-slate-500 font-medium hover:text-slate-700 hover:bg-slate-200 rounded-xl transition-colors text-sm flex justify-center items-center gap-2 mt-2"
+                        >
+                            <Icon name="RefreshCw" size={16} /> ล้างข้อมูลทั้งหมด
+                        </button>
+                    </div>
+
+                </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
